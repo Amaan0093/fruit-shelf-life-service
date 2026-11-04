@@ -206,7 +206,7 @@ def save(model: FruitShelfLifeNet, out_dir: Path = ARTIFACTS):
 def load(out_dir: Path = ARTIFACTS, device: str | None = None) -> FruitShelfLifeNet:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = FruitShelfLifeNet(pretrained=False).to(device)
-    state = torch.load(out_dir / "mobilenet.pt", map_location=device)
+    state = torch.load(out_dir / "mobilenet.pt", map_location=device, weights_only=True)
     model.load_state_dict(state)
     model.eval()
     return model

@@ -2,8 +2,9 @@ FROM python:3.13-slim
 
 WORKDIR /app
 COPY requirements-api.txt .
-RUN pip install --no-cache-dir torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements-api.txt
+RUN pip uninstall -y pip setuptools wheel
 
 COPY config.py .
 COPY app ./app
