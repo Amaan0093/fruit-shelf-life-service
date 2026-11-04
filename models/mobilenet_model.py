@@ -38,6 +38,16 @@ from data.dataset_loader import fruit_to_index
 
 # Dataset
 
+def eval_transform() -> transforms.Compose:
+    """Preprocessing for inference, shared by evaluation and the API."""
+    weights = MobileNet_V2_Weights.IMAGENET1K_V2
+    return transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(DEEP_IMG_SIZE[0]),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=weights.transforms().mean, std=weights.transforms().std),
+    ])
+
 class FruitImageDataset(Dataset):
     def __init__(self, df: pd.DataFrame, training: bool):
         self.paths: List[str] = df["path"].tolist()
@@ -57,12 +67,7 @@ class FruitImageDataset(Dataset):
                 normalize,
             ])
         else:
-            self.tf = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(DEEP_IMG_SIZE[0]),
-                transforms.ToTensor(),
-                normalize,
-            ])
+            self.tf = eval_transform()
 
     def __len__(self):
         return len(self.paths)
@@ -77,9 +82,9 @@ class FruitImageDataset(Dataset):
 class FruitShelfLifeNet(nn.Module):
     """MobileNetV2 backbone + fruit-type embedding -> scalar shelf life."""
 
-    def __init__(self, fruit_embed_dim: int = MOBILENET["fruit_embed_dim"]):
+    def __init__(self, fruit_embed_dim: int = MOBILENET["fruit_embed_dim"], pretrained: bool = True):
         super().__init__()
-        weights = MobileNet_V2_Weights.IMAGENET1K_V2
+        weights = MobileNet_V2_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = mobilenet_v2(weights=weights)
         self.features = backbone.features
         self.pool = nn.AdaptiveAvgPool2d(1)
@@ -200,7 +205,7 @@ def save(model: FruitShelfLifeNet, out_dir: Path = ARTIFACTS):
 
 def load(out_dir: Path = ARTIFACTS, device: str | None = None) -> FruitShelfLifeNet:
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    model = FruitShelfLifeNet().to(device)
+    model = FruitShelfLifeNet(pretrained=False).to(device)
     state = torch.load(out_dir / "mobilenet.pt", map_location=device)
     model.load_state_dict(state)
     model.eval()

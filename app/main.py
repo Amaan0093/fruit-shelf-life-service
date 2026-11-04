@@ -1,20 +1,22 @@
-"""HTTP API that serves the trained SVR shelf-life model."""
+"""HTTP API that serves the trained MobileNetV2 shelf-life model."""
 from enum import Enum
+from io import BytesIO
+from time import perf_counter
 
-import cv2
-import joblib
-import numpy as np
+import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from PIL import Image
 
-from config import ARTIFACTS, FRUIT_LIST, FRUITS
-from features.color_histogram import hsv_histogram_from_bgr
+from config import FRUITS
+from data.dataset_loader import fruit_to_index
+from models.mobilenet_model import eval_transform, load
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
-MODEL_VERSION = "svr-v1"
+MODEL_VERSION = "mobilenetv2-v1"
 
-app = FastAPI(title="Fruit Shelf-Life API", version="1.0.0")
-_bundle = joblib.load(ARTIFACTS / "svr.joblib")
-_scaler, _model = _bundle["scaler"], _bundle["model"]
+app = FastAPI(title="Fruit Shelf-Life API", version="2.0.0")
+_model = load(device="cpu")
+_transform = eval_transform()
 
 
 class Fruit(str, Enum):
@@ -29,22 +31,24 @@ def health():
 
 
 @app.post("/predict")
-async def predict(fruit: Fruit = Form(...), file: UploadFile = File(...)):
-    data = await file.read(MAX_UPLOAD_BYTES + 1)
+def predict(fruit: Fruit = Form(...), file: UploadFile = File(...)):
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image is larger than 5 MB")
 
-    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR) if data else None
-    if img is None:
+    try:
+        img = Image.open(BytesIO(data)).convert("RGB")
+    except (OSError, Image.DecompressionBombError):
         raise HTTPException(status_code=400, detail="File is not a readable image")
 
-    one_hot = np.zeros(len(FRUIT_LIST), dtype=np.float32)
-    one_hot[FRUIT_LIST.index(fruit.value)] = 1.0
-    features = np.concatenate([hsv_histogram_from_bgr(img), one_hot]).reshape(1, -1)
-    days = float(_model.predict(_scaler.transform(features))[0])
+    start = perf_counter()
+    with torch.inference_mode():
+        days = _model(_transform(img).unsqueeze(0), torch.tensor([fruit_to_index(fruit.value)])).item()
+    inference_ms = (perf_counter() - start) * 1000
 
     return {
         "fruit": fruit.value,
-        "predicted_days": round(float(np.clip(days, 0, FRUITS[fruit.value]["max_days"])), 2),
+        "predicted_days": round(min(max(days, 0.0), FRUITS[fruit.value]["max_days"]), 2),
         "model_version": MODEL_VERSION,
+        "inference_ms": round(inference_ms, 1),
     }

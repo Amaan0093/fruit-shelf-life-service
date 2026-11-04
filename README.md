@@ -17,16 +17,24 @@ a fine-tuned MobileNetV2.
 
 ## 1. Headline result
 
-| Model         | Test MAE | Test RMSE | Test R²  | CPU latency  | Size on disk |
-| ------------- | -------- | --------- | -------- | ------------ | ------------ |
-| **SVR**       | **0.295 d** | **0.619 d** | **0.981** | **3.7 ms**   | **4.6 MB**   |
-| RandomForest  | 0.517 d  | 0.928 d   | 0.958    | 127 ms       | 19.5 MB      |
-| MobileNetV2   | 0.687 d  | 0.981 d   | 0.953    | 60 ms        | 9.3 MB       |
+| Model | Test MAE | Test RMSE | Test R² | CPU latency | Size on disk |
+| ----- | -------- | --------- | ------- | ----------- | ------------ |
+| **MobileNetV2** (served by the API) | **0.967 d** | **1.335 d** | **0.910** | 31 ms | 9.4 MB |
+| RandomForest | 1.217 d | 2.007 d | 0.797 | 46 ms | 17.2 MB |
+| SVR | 1.577 d | 2.322 d | 0.728 | **3.8 ms** | **6.5 MB** |
 
-All three models clear the ≤1-day MAE target. The SVR sits at the Pareto
-frontier on every axis. A methodological caveat about this finding is
-discussed in §V-J of the report — please read that section before drawing
-conclusions about the relative merit of the three model families.
+**These results replace those in the submitted report.** The dataset holds 9 copies
+of each of its 1,511 photos, and the original random split put copies of every test
+photo into training. That made the SVR look best (0.295 d MAE). Splitting by source
+photo removes the overlap and reverses the ranking.
+
+**Limitations**
+
+- Labels come from image brightness, not observed spoilage, so these figures measure
+  agreement with those labels rather than real shelf life in days.
+- The labels fail the stage ordering check for apples, and oranges are almost tied:
+  mean decay is lower for stage 3 than stage 2 (apple 0.183 vs 0.324, orange 0.154 vs 0.160).
+- The API does not check that an image actually shows the selected fruit.
 
 ---
 

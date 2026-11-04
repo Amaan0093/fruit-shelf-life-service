@@ -1,23 +1,28 @@
-"""The refactored feature code must still reproduce the saved test predictions."""
-import joblib
-import numpy as np
+"""The API's preprocessing must reproduce the saved test predictions."""
+from pathlib import Path
+
 import pandas as pd
+import torch
+from PIL import Image
 
-from config import ARTIFACTS, DATA_ROOT, FRUIT_LIST
-from features.color_histogram import hsv_histogram
+from config import ARTIFACTS
+from data.dataset_loader import fruit_to_index
+from models.mobilenet_model import eval_transform, load
 
-DATASET_FILES = {p.name: p for p in DATA_ROOT.rglob("*") if p.is_file()}
+IMAGES = list((Path(__file__).parent / "fixtures" / "parity").iterdir())
 
 
 def test_matches_saved_predictions():
-    saved = pd.read_csv(ARTIFACTS / "predictions_svr.csv")
+    saved = pd.read_csv(ARTIFACTS / "predictions_mobilenet.csv")
     saved["name"] = saved["path"].str.replace("\\", "/", regex=False).str.split("/").str[-1]
-    rows = saved[saved["name"].isin(DATASET_FILES)]
-    assert len(rows) > 0
+    expected = saved.set_index("name")
 
-    bundle = joblib.load(ARTIFACTS / "svr.joblib")
-    for row in rows.itertuples():
-        one_hot = np.eye(len(FRUIT_LIST), dtype=np.float32)[FRUIT_LIST.index(row.fruit)]
-        x = np.concatenate([hsv_histogram(DATASET_FILES[row.name]), one_hot]).reshape(1, -1)
-        pred = bundle["model"].predict(bundle["scaler"].transform(x))[0]
-        assert abs(pred - row.y_pred) < 1e-3
+    assert len(IMAGES) == 3
+    model = load(device="cpu")
+    transform = eval_transform()
+    for path in IMAGES:
+        row = expected.loc[path.name]
+        tensor = transform(Image.open(path).convert("RGB")).unsqueeze(0)
+        with torch.inference_mode():
+            pred = model(tensor, torch.tensor([fruit_to_index(row["fruit"])])).item()
+        assert abs(pred - row["y_pred"]) < 1e-3

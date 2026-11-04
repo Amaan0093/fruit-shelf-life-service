@@ -2,12 +2,14 @@ FROM python:3.13-slim
 
 WORKDIR /app
 COPY requirements-api.txt .
+RUN pip install --no-cache-dir torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements-api.txt
 
 COPY config.py .
 COPY app ./app
-COPY features ./features
-COPY outputs/svr.joblib ./outputs/svr.joblib
+COPY data ./data
+COPY models ./models
+COPY outputs/mobilenet.pt ./outputs/mobilenet.pt
 
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser

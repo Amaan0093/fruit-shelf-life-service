@@ -109,36 +109,37 @@ def build_index(data_root: Path = DATA_ROOT) -> pd.DataFrame:
     return df
 
 
-# Stratified split
+# Grouped split
+
+# The Kaggle set holds 9 copies of each photo (original, rotations, flip, etc.).
+_COPY_PREFIX = re.compile(
+    r"^(?:(?:train|test)_)?(?:rotated_by_\d+_|translation_|vertical_flip_|saltandpepper_)?",
+    re.IGNORECASE,
+)
+
+
+def source_photo(path: str) -> str:
+    """Return the name of the original photo an image was derived from."""
+    name = str(path).replace("\\", "/").split("/")[-1]
+    return _COPY_PREFIX.sub("", name, count=1)
+
 
 def stratified_split(
     df: pd.DataFrame,
     ratios: Tuple[float, float, float] = SPLIT_RATIOS,
     seed: int = SEED,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Split `df` into train/val/test, stratified by (fruit, stage).
-
-    Each (fruit, stage) bin is split independently so every cell is
-    represented in every split (per the proposal's stratification choice).
-    """
+    """Split `df` into train/val/test, keeping all copies of a photo together."""
     rng = np.random.default_rng(seed)
-    train_idx, val_idx, test_idx = [], [], []
+    sources = df["path"].map(source_photo)
+    unique = sources.unique().tolist()
+    rng.shuffle(unique)
 
-    for (fruit, stage), group in df.groupby(["fruit", "stage"]):
-        idx = group.index.to_numpy().copy()  # .copy(): pandas index arrays are read-only
-        rng.shuffle(idx)
-        n = len(idx)
-        n_train = int(round(n * ratios[0]))
-        n_val = int(round(n * ratios[1]))
-        train_idx.extend(idx[:n_train])
-        val_idx.extend(idx[n_train : n_train + n_val])
-        test_idx.extend(idx[n_train + n_val :])
+    n_train = int(round(len(unique) * ratios[0]))
+    n_val = int(round(len(unique) * ratios[1]))
+    groups = (unique[:n_train], unique[n_train : n_train + n_val], unique[n_train + n_val :])
+    train, val, test = (df[sources.isin(g)].reset_index(drop=True) for g in groups)
 
-    train, val, test = (
-        df.loc[train_idx].reset_index(drop=True),
-        df.loc[val_idx].reset_index(drop=True),
-        df.loc[test_idx].reset_index(drop=True),
-    )
     print(
         f"[dataset] Split sizes  -  train: {len(train):,}  "
         f"val: {len(val):,}  test: {len(test):,}"
