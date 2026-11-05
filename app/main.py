@@ -7,6 +7,7 @@ import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from PIL import Image
 
+from app.monitoring import image_stats, log_prediction
 from config import FRUITS
 from data.dataset_loader import fruit_to_index
 from models.mobilenet_model import eval_transform, load
@@ -46,9 +47,11 @@ def predict(fruit: Fruit = Form(...), file: UploadFile = File(...)):
         days = _model(_transform(img).unsqueeze(0), torch.tensor([fruit_to_index(fruit.value)])).item()
     inference_ms = (perf_counter() - start) * 1000
 
-    return {
+    result = {
         "fruit": fruit.value,
         "predicted_days": round(min(max(days, 0.0), FRUITS[fruit.value]["max_days"]), 2),
         "model_version": MODEL_VERSION,
         "inference_ms": round(inference_ms, 1),
     }
+    log_prediction(**result, **image_stats(img))
+    return result

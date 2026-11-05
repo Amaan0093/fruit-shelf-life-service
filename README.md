@@ -36,6 +36,21 @@ photo removes the overlap and reverses the ranking.
   mean decay is lower for stage 3 than stage 2 (apple 0.183 vs 0.324, orange 0.154 vs 0.160).
 - The API does not check that an image actually shows the selected fruit.
 
+## Monitoring and retraining
+
+The API logs summary numbers for each prediction, never the image. A drift check
+(`scripts/check_drift.py`) compares them with held-out test data using PSI, and a
+value above 0.25 recommends a review. It cannot measure accuracy, because live
+requests have no true labels.
+
+When a review is recommended:
+
+1. Find the cause, such as a real change in photos or just a small sample.
+2. Collect and label new data that represents the change.
+3. Retrain, keeping all copies of a photo in the same split.
+4. Deploy only if the new model beats the current one on held-out photos.
+5. Rebuild the reference with `scripts/build_reference.py`.
+
 ---
 
 ## 2. Repository layout

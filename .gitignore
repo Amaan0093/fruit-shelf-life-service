@@ -6,3 +6,5 @@ __pycache__/
 features.zip
 outputs/rf.joblib
 dataset/
+outputs/production_logs.json
+outputs/drift_report.csv
